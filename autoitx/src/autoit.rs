@@ -1047,6 +1047,58 @@ impl AutoIt {
     pub fn raw_error(&self) -> i32 {
         self.inner.raw_error()
     }
+
+    // -- Pinned-reference primitives ---------------------------------------
+    //
+    // `pub(crate)`: the public entry point is `crate::reference::ControlRef`,
+    // which pairs these handle-only calls with the identity verification that
+    // makes them safe. Exposing raw HWND actions on their own would invite
+    // exactly the untargeted clicks the reference type exists to prevent.
+
+    #[cfg(any(windows, feature = "mock-loader", docsrs))]
+    pub(crate) fn control_click_by_handle(
+        &self,
+        window: u64,
+        control: u64,
+        button: &str,
+        clicks: u32,
+        at: Option<Point>,
+    ) -> Result<()> {
+        self.inner
+            .control_click_by_handle(window, control, button, clicks, at)
+    }
+
+    #[cfg(any(windows, feature = "mock-loader", docsrs))]
+    pub(crate) fn control_send_by_handle(
+        &self,
+        window: u64,
+        control: u64,
+        keys: &Keys,
+    ) -> Result<()> {
+        self.inner.control_send_by_handle(window, control, keys)
+    }
+
+    #[cfg(any(windows, feature = "mock-loader", docsrs))]
+    pub(crate) fn control_set_text_by_handle(
+        &self,
+        window: u64,
+        control: u64,
+        text: &str,
+    ) -> Result<()> {
+        self.inner.control_set_text_by_handle(window, control, text)
+    }
+
+    #[cfg(any(windows, feature = "mock-loader", docsrs))]
+    pub(crate) fn control_command_by_handle(
+        &self,
+        window: u64,
+        control: u64,
+        command: &str,
+        extra: &str,
+    ) -> Result<String> {
+        self.inner
+            .control_command_by_handle(window, control, command, extra)
+    }
 }
 
 /// Which mouse button to click.

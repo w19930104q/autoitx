@@ -76,6 +76,8 @@ pub mod error;
 pub mod geometry;
 pub mod keys;
 pub mod options;
+#[cfg(any(windows, feature = "mock-loader", docsrs))]
+pub mod reference;
 pub mod selector;
 
 #[cfg(any(windows, target_os = "macos", feature = "mock-loader", docsrs))]

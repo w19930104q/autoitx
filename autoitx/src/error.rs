@@ -145,6 +145,15 @@ pub enum Error {
         platform: &'static str,
     },
 
+    /// A pinned control reference rejected an operation.
+    ///
+    /// Boxed so the variant-specific detail — window generation changes,
+    /// control replacement, readiness — does not grow every other [`Error`].
+    /// See [`crate::reference::ReferenceError`].
+    #[cfg(any(windows, feature = "mock-loader", docsrs))]
+    #[error(transparent)]
+    Reference(Box<crate::reference::ReferenceError>),
+
     /// An underlying I/O failure, e.g. launching a program.
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -157,6 +166,13 @@ impl Error {
         Self::WindowNotFound {
             selector: Box::new(selector.clone()),
         }
+    }
+}
+
+#[cfg(any(windows, feature = "mock-loader", docsrs))]
+impl From<crate::reference::ReferenceError> for Error {
+    fn from(value: crate::reference::ReferenceError) -> Self {
+        Self::Reference(Box::new(value))
     }
 }
 

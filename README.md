@@ -140,6 +140,64 @@ match ai.wait_for_any(&[
 }
 ```
 
+## Pinned control references: find once, verify every time
+
+The per-call methods take a fresh `Selector`/`Control` pair each time, which is
+right for one operation and wrong for an unattended one. Between two calls the
+application can pop an error dialog, retitle the window, or rebuild the
+control — and a general selector then resolves to *whatever matches now*. The
+keystroke meant for the invoice field lands in the dialog that appeared on top
+of it, with success reported back.
+
+[`autoitx::reference::ControlRef`][ref] closes that gap by turning
+"find it each time" into one auditable action.
+
+- **Bind once.** The window and control are resolved to their HWNDs up front,
+  together with a window *generation*. The original selector is used only here.
+- **Verify before every act.** Each call holds the session lock across the
+  whole check-and-act, proving the same window handle still exists, that
+  re-resolving the control returns the same control handle, and that both are
+  visible and enabled. No thread can interleave between the check and the act.
+- **Fail, never retarget.** If the window is closed and another window inherits
+  its selector, the generation changes and every later call — on any clone, on
+  any thread — fails with `WindowGenerationChanged`. A control rebuilt under the
+  same identifier but a new handle fails with `ControlReplaced`. The target is
+  never silently rewritten, and the failure is sticky.
+- **Bounded waits with cancellation.** `wait_enabled` and `wait_text_changes`
+  take a mandatory deadline and an optional `CancellationToken`; a wait releases
+  the lock between poll passes, so a timeout or cancellation parks no thread and
+  cannot wedge the next call.
+- **An auditable outcome.** Every action returns the handles actually used, the
+  elapsed time, and the terminal readiness state. Actions go through the
+  `*ByHandle` FFI, so a selector that now matches something else cannot redirect
+  them.
+
+```rust,ignore
+use autoitx::reference::{ControlRef, Wait};
+use autoitx::{AutoIt, Control, Selector};
+use std::time::Duration;
+
+let ai = AutoIt::new()?;
+let ok = ControlRef::bind(
+    &ai,
+    &Selector::from("[CLASS:ui60Modal_W32;TITLE:Post Invoice]"),
+    &Control::id(1001),
+)?;
+
+// Wait up to 30 s for the button to enable; a dialog popping up meanwhile
+// cannot absorb the click.
+ok.wait_enabled(Wait::timed(Duration::from_secs(30)))?;
+let outcome = ok.click(Default::default())?;
+println!(
+    "clicked {:#x} in {:#x} after {:?}",
+    outcome.control_handle, outcome.window_handle, outcome.elapsed
+);
+# Ok::<(), autoitx::Error>(())
+```
+
+The lower-level `Selector`/`Control` methods and the raw DLL table are all
+still there — the reference type is an additive layer on top of them.
+
 ## Setup
 
 ### Windows
@@ -196,7 +254,7 @@ A Windows machine is needed only to observe real behaviour — never to compile.
 
 ## Examples
 
-Nine, in [`autoitx/examples`][examples]. Run any with
+Ten, in [`autoitx/examples`][examples]. Run any with
 `cargo run --example <name>`.
 
 | | |
@@ -206,6 +264,7 @@ Nine, in [`autoitx/examples`][examples]. Run any with
 | [`type_safely`][type_safely] | The four ways to build a key sequence, and when each is right |
 | [`read_field`][read_field] | Reading a field through the clipboard without the race |
 | [`anchored_click`][anchored_click] | Clicking without pinning the screen resolution |
+| [`audited_control`][audited_control] | A pinned control reference: bind once, wait with a deadline, verify, and act without a popped dialog hijacking the target |
 | [`wait_until_ready`][wait_until_ready] | One intent, two mechanisms, one call |
 | [`portable_selectors`][portable_selectors] | One selector table for both platforms |
 | [`port_from_csharp`][port_from_csharp] | The same flow in AutoItX.Dotnet and here, side by side |
@@ -217,10 +276,12 @@ Nine, in [`autoitx/examples`][examples]. Run any with
 [type_safely]: https://github.com/iagodpassos/autoitx/blob/main/autoitx/examples/type_safely.rs
 [read_field]: https://github.com/iagodpassos/autoitx/blob/main/autoitx/examples/read_field.rs
 [anchored_click]: https://github.com/iagodpassos/autoitx/blob/main/autoitx/examples/anchored_click.rs
+[audited_control]: https://github.com/iagodpassos/autoitx/blob/main/autoitx/examples/audited_control.rs
 [wait_until_ready]: https://github.com/iagodpassos/autoitx/blob/main/autoitx/examples/wait_until_ready.rs
 [portable_selectors]: https://github.com/iagodpassos/autoitx/blob/main/autoitx/examples/portable_selectors.rs
 [port_from_csharp]: https://github.com/iagodpassos/autoitx/blob/main/autoitx/examples/port_from_csharp.rs
 [port_from_autoit]: https://github.com/iagodpassos/autoitx/blob/main/autoitx/examples/port_from_autoit.rs
+[ref]: https://docs.rs/autoitx/latest/autoitx/reference/index.html
 
 ## Status
 

@@ -1199,6 +1199,96 @@ impl Inner {
         })
     }
 
+    // -- By-handle control primitives --------------------------------------
+    //
+    // These back `crate::reference`: once a control has been pinned to its two
+    // HWNDs, every later action must address those HWNDs directly rather than
+    // re-running a selector that could now match a dialog on top. They stay
+    // `pub(crate)` because the pinned reference is the only safe entry point —
+    // a bare handle carries no identity checking.
+
+    /// `AU3_ControlClickByHandle` against pinned HWNDs.
+    pub(crate) fn control_click_by_handle(
+        &self,
+        hwnd: u64,
+        hctrl: u64,
+        button: &str,
+        clicks: u32,
+        at: Option<Point>,
+    ) -> Result<()> {
+        let win = hwnd as usize as autoitx_sys::HWND;
+        let control = hctrl as usize as autoitx_sys::HWND;
+        let b = wide(button, "mouse button")?;
+        let (x, y) = at.map_or((AU3_INTDEFAULT, AU3_INTDEFAULT), |p| (p.x, p.y));
+        let (ok, code) = au3!(
+            self,
+            AU3_ControlClickByHandle(win, control, b.as_ptr(), clicks as i32, x, y,)
+        );
+        if ok == 0 {
+            return Err(Error::AutoItFailed {
+                func: "AU3_ControlClickByHandle",
+                code,
+            });
+        }
+        Ok(())
+    }
+
+    /// `AU3_ControlSendByHandle` against pinned HWNDs.
+    pub(crate) fn control_send_by_handle(&self, hwnd: u64, hctrl: u64, keys: &Keys) -> Result<()> {
+        let win = hwnd as usize as autoitx_sys::HWND;
+        let control = hctrl as usize as autoitx_sys::HWND;
+        let k = wide(keys.as_str(), "keys")?;
+        let (ok, code) = au3!(self, AU3_ControlSendByHandle(win, control, k.as_ptr(), 0));
+        if ok == 0 {
+            return Err(Error::AutoItFailed {
+                func: "AU3_ControlSendByHandle",
+                code,
+            });
+        }
+        Ok(())
+    }
+
+    /// `AU3_ControlSetTextByHandle` against pinned HWNDs.
+    pub(crate) fn control_set_text_by_handle(
+        &self,
+        hwnd: u64,
+        hctrl: u64,
+        text: &str,
+    ) -> Result<()> {
+        let win = hwnd as usize as autoitx_sys::HWND;
+        let control = hctrl as usize as autoitx_sys::HWND;
+        let t = wide(text, "control text")?;
+        let (ok, code) = au3!(self, AU3_ControlSetTextByHandle(win, control, t.as_ptr()));
+        if ok == 0 {
+            return Err(Error::AutoItFailed {
+                func: "AU3_ControlSetTextByHandle",
+                code,
+            });
+        }
+        Ok(())
+    }
+
+    /// `AU3_ControlCommandByHandle` against pinned HWNDs.
+    pub(crate) fn control_command_by_handle(
+        &self,
+        hwnd: u64,
+        hctrl: u64,
+        command: &str,
+        extra: &str,
+    ) -> Result<String> {
+        let win = hwnd as usize as autoitx_sys::HWND;
+        let control = hctrl as usize as autoitx_sys::HWND;
+        let cmd = wide(command, "control command")?;
+        let ex = wide(extra, "control command argument")?;
+        self.call_str("AU3_ControlCommandByHandle", LARGE_BUF, |buf, cap| {
+            let (_, code) = au3!(
+                self,
+                AU3_ControlCommandByHandle(win, control, cmd.as_ptr(), ex.as_ptr(), buf, cap,)
+            );
+            code
+        })
+    }
+
     pub(crate) fn sleep(&self, d: Duration) {
         // Deliberately not an AU3_Sleep call: that would hold the lock for the
         // whole duration, blocking every other thread's automation for no
